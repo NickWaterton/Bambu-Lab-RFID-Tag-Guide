@@ -3,6 +3,7 @@
 # Common functions used throughout the project
 # Created for https://github.com/Bambu-Research-Group/RFID-Tag-Guide
 
+import re
 import subprocess
 import os
 import sys
@@ -24,13 +25,13 @@ def strip_color_codes(input_string):
 def run_command(command, pipe=True):
     print(' '.join([str(c) for c in command]))
     try:
-        # On Windows, use the shell=True argument to run the command
         result = subprocess.run(command, shell=os.name == 'nt', capture_output=pipe)
-        # Check the return code to determine if the command was successful
-        if result.returncode == 0 or result.returncode == 1:
-            return result.stdout.decode("utf-8").strip().replace('\r\n', '\n') if pipe else ""
-        return None
+        if result.returncode not in (0, 1):
+            print(f"Warning: command exited with code {result.returncode}")
+            return None
+        return result.stdout.decode("utf-8").strip().replace('\r\n', '\n') if pipe else ""
     except Exception as e:
+        print(f"Error running command: {e}")
         return None
 
 def get_proxmark3_location():
@@ -39,12 +40,21 @@ def get_proxmark3_location():
 
     # Check PROXMARK3_DIR environment variable
     if os.environ.get('PROXMARK3_DIR'):
-        if run_command(os.environ['PROXMARK3_DIR'] + "/bin/pm3", "--help"):
-            return os.environ['PROXMARK3_DIR']
+        pm3_dir = Path(os.environ['PROXMARK3_DIR'])
+        pm3_bin = pm3_dir / "bin" / "pm3"
+        # On Windows the wrapper is pm3.bat; on Unix it is pm3 (no extension)
+        pm3_exists = pm3_bin.exists() or (os.name == 'nt' and (pm3_dir / "bin" / "pm3.bat").exists())
+        if pm3_exists:
+            print(f"Found installation via PROXMARK3_DIR ({pm3_dir})!")
+            return pm3_dir
         else:
             print("Warning: PROXMARK3_DIR environment variable points to the wrong folder, ignoring")
 
-    # Get Homebrew installation
+    if os.name == 'nt':
+        print("Failed to find working 'pm3' command. On Windows, set the PROXMARK3_DIR environment variable to your Proxmark3 installation directory (e.g. D:\\Proxmark3).")
+        return None
+
+    # Get Homebrew installation (macOS/Linux)
     brew_install = run_command(["brew", "--prefix", "proxmark3"])
     if brew_install:
         print("Found installation via Homebrew!")
@@ -76,7 +86,7 @@ def testCommands(directories, command, arguments = ""):
             continue
 
         #OPTIONAL: add arguments such as "--help" to help identify programs that don't exit on their own
-        cmd_list = [directory+"/"+command, arguments]
+        cmd_list = [directory+"/"+command] + ([arguments] if arguments else [])
 
         #Test if this program works
         print("Trying:", directory, end="...")
