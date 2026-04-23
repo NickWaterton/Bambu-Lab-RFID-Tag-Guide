@@ -7,7 +7,7 @@
 
 This repository contains the collective research of the Bambu Lab Filament RFID Tags and serves as a guide to give you a basic overview how you can decrypt and read your tags.
 
-Please visit the [Bambu Lab RFID Library Repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library) to view our collection of tags.
+Please visit the [Bambu Lab RFID Library Repository](https://github.com/NickWaterton/Bambu-Lab-RFID-Library) to view our collection of tags.
 
 [![Link to Discord](https://img.shields.io/badge/Discord-join_now-blue?style=flat-square&logo=discord&logoColor=white&label=Discord&color=blue)](https://discord.gg/zVfCVubwr7)
 
@@ -42,7 +42,7 @@ This is a research group dedicated to documenting the data structures used by Ba
   - No, tags are digitally signed. Even if you modify the contents, the printer will reject any tags without a valid RSA signature
   - An [Open Source RFID Tag](OpenSourceRfid.md) has been proposed to allow anyone to create / modify their own tags. This must be adopted by printer manufacturers, or you can mod your own printer for support
 - **Can I clone tags?**
-  - Yes, you can read and clone tags using a tool such as a Proxmark3. Check out our [collection of scanned tags](https://github.com/queengooborg/Bambu-Lab-RFID-Library)
+  - Yes, you can read and clone tags using a tool such as a Proxmark3. Check out our [collection of scanned tags](https://github.com/NickWaterton/Bambu-Lab-RFID-Library)
 - **What are the next steps for this project?**
   - Decyphering the rest of the unknown tag content
   - Custom AMS firmware that allows custom tags to be read while ignoring the signature
@@ -50,14 +50,14 @@ This is a research group dedicated to documenting the data structures used by Ba
 
 ### How to contribute
 
-The easiest way to contribute tag data is with the **`scanTag.py`** script in the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library). It handles everything automatically: deriving keys, dumping the tag, looking up the official colour name, and saving the data to the correct folder in the library.
+The easiest way to contribute tag data is with the **`scanTag.py`** script in the [Bambu Lab RFID Library repository](https://github.com/NickWaterton/Bambu-Lab-RFID-Library). It handles everything automatically: deriving keys, dumping the tag, looking up the official colour name, and saving the data to the correct folder in the library.
 
 ```
 # From inside the Bambu-Lab-RFID-Library directory:
 python scanTag.py
 ```
 
-If you prefer to dump tags manually, see [docs/ReadTags.md](./docs/ReadTags.md) for step-by-step instructions, then open a Pull Request against the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library).
+If you prefer to dump tags manually, see [docs/ReadTags.md](./docs/ReadTags.md) for step-by-step instructions, then open a Pull Request against the [Bambu Lab RFID Library repository](https://github.com/NickWaterton/Bambu-Lab-RFID-Library).
 
 A lot of the contents have been deciphered, but the more data we have, the easier it is to compare differences to learn what each byte represents and double-check our answers.
 
@@ -70,7 +70,7 @@ A lot of the contents have been deciphered, but the more data we have, the easie
 ## Scripts
 
 > [!NOTE]
-> The primary operational scripts — **`scanTag.py`** (scan a tag and add it to the library) and **`writeTag.py`** (write a library dump to a blank tag) — live in the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library), alongside the library management tools. See that repository's README for full usage documentation.
+> The primary operational scripts — **`scanTag.py`** (scan a tag and add it to the library) and **`writeTag.py`** (write a library dump to a blank tag) — live in the [Bambu Lab RFID Library repository](https://github.com/NickWaterton/Bambu-Lab-RFID-Library), alongside the library management tools. See that repository's README for full usage documentation.
 
 Scripts that remain in this repository:
 
