@@ -23,7 +23,7 @@ from lib import get_proxmark3_location, run_command
 from deriveKeys import kdf
 
 # ---------------------------------------------------------------------------
-# Locate the library repo and import from it
+# Locate the library repo and import shared category maps from it
 # ---------------------------------------------------------------------------
 
 def _find_library(override=None):
@@ -37,37 +37,16 @@ def _find_library(override=None):
         sys.exit(1)
     return p
 
-# Deferred — populated after arg parsing
-LIBRARY_ROOT = None
+# Peek at sys.argv for --library so we can set up the path before argparse runs.
+# This lets us import from the Library's categories.py at module level.
+_lib_override = next(
+    (sys.argv[i + 1] for i, a in enumerate(sys.argv[:-1]) if a == '--library'),
+    None,
+)
+LIBRARY_ROOT = _find_library(_lib_override)
+sys.path.insert(0, str(LIBRARY_ROOT))
 
-# ---------------------------------------------------------------------------
-# Category mapping (must match fix_library.py / library_checker.py)
-# ---------------------------------------------------------------------------
-
-CATEGORY_MAP = {
-    'PA-S':     'Support Material',
-    'PLA-S':    'Support Material',
-    'Support':  'Support Material',
-    'PVA':      'Support Material',
-    'ABS-S':    'Support Material',
-    'PETG-CF':  'PETG',
-    'TPU-AMS':  'TPU',
-    'ABS-GF':   'ABS',
-    'PLA-CF':   'PLA',
-    'PA-CF':    'PA',
-    'ASA-CF':   'ASA',
-    'ASA Aero': 'ASA',
-}
-
-# Maps tag detailed_filament_type values for materials shared across multiple library folders.
-# Value is (single_colour_folder, multi_colour_folder).
-# Note: 'PLA Silk+' stores 'PLA Silk+' in the tag and needs no entry here.
-#       'PLA Silk' covers two distinct products:
-#         - PLA Silk (discontinued single-colour) → PLA Silk/
-#         - PLA Silk Multi-Color                  → PLA Silk Multi-Color/
-MULTI_COLOR_MATERIAL_MAP = {
-    'PLA Silk': ('PLA Silk', 'PLA Silk Multi-Color'),
-}
+from categories import CATEGORY_MAP, MULTI_COLOR_MATERIAL_MAP, resolve_material  # noqa: E402
 
 pm3Location = None
 pm3Command   = "bin/pm3"
@@ -184,20 +163,6 @@ def dump_tag(uid, key_path, output_base):
 # Library helpers
 # ---------------------------------------------------------------------------
 
-def resolve_material(tag_data):
-    """
-    Return the library folder name for the material.
-    Some tag types store the same detailed_filament_type for both single- and
-    multi-colour variants (e.g. 'PLA Silk' covers both 'PLA Silk+' and
-    'PLA Silk Multi-Color').  Use filament_color_count to pick the right one.
-    """
-    base = tag_data['detailed_filament_type']
-    if base in MULTI_COLOR_MATERIAL_MAP:
-        single, multi = MULTI_COLOR_MATERIAL_MAP[base]
-        return multi if tag_data.get('filament_color_count', 1) > 1 else single
-    return base
-
-
 def dest_dir(tag_data, color_name, library_root):
     category = CATEGORY_MAP.get(tag_data['filament_type'], tag_data['filament_type'])
     material = resolve_material(tag_data)
@@ -209,8 +174,6 @@ def dest_dir(tag_data, color_name, library_root):
 # ---------------------------------------------------------------------------
 
 def main():
-    global LIBRARY_ROOT
-
     parser = argparse.ArgumentParser(
         description='Read a Bambu Lab RFID tag with Proxmark3 and add it to the library.'
     )
@@ -220,10 +183,14 @@ def main():
     )
     args = parser.parse_args()
 
-    LIBRARY_ROOT = _find_library(args.library)
+    # LIBRARY_ROOT and sys.path were already set at module level via the argv
+    # peek above; if --library differs, update them now.
+    if args.library and Path(args.library).resolve() != LIBRARY_ROOT:
+        new_root = _find_library(args.library)
+        sys.path[0] = str(new_root)
+        globals()['LIBRARY_ROOT'] = new_root
 
-    # Import library modules now that we know the path
-    sys.path.insert(0, str(LIBRARY_ROOT))
+    # Import remaining library modules (categories already imported at top)
     from parse import Tag
     from convert import sync_directory
     from update_readme import run as update_readme
