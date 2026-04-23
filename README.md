@@ -50,7 +50,14 @@ This is a research group dedicated to documenting the data structures used by Ba
 
 ### How to contribute
 
-If you have a Proxmark3 (or other RFID debugging tool), you can decrypt the contents of your Bambu Lab RFID tags and submit a Pull Request to the [Bambu Lab RFID Library Repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library).
+The easiest way to contribute tag data is with the **`scanTag.py`** script in the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library). It handles everything automatically: deriving keys, dumping the tag, looking up the official colour name, and saving the data to the correct folder in the library.
+
+```
+# From inside the Bambu-Lab-RFID-Library directory:
+python scanTag.py
+```
+
+If you prefer to dump tags manually, see [docs/ReadTags.md](./docs/ReadTags.md) for step-by-step instructions, then open a Pull Request against the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library).
 
 A lot of the contents have been deciphered, but the more data we have, the easier it is to compare differences to learn what each byte represents and double-check our answers.
 
@@ -60,10 +67,23 @@ A lot of the contents have been deciphered, but the more data we have, the easie
 - [x] Tag content analysis
 - [x] Generate keys based on an arbitrary UID
 
+## Scripts
+
+> [!NOTE]
+> The primary operational scripts — **`scanTag.py`** (scan a tag and add it to the library) and **`writeTag.py`** (write a library dump to a blank tag) — live in the [Bambu Lab RFID Library repository](https://github.com/queengooborg/Bambu-Lab-RFID-Library), alongside the library management tools. See that repository's README for full usage documentation.
+
+Scripts that remain in this repository:
+
+| Script | Purpose |
+|--------|---------|
+| `deriveKeys.py` | Derives the 32 sector keys for a tag UID and prints them. Used by `libnfc_dump.py`. |
+| `libnfc_dump.py` | Dumps a Bambu Lab tag using a libnfc-compatible reader (Linux/macOS alternative to Proxmark3). |
+| `traceKeyExtractor.py` | Extracts keys from a Proxmark3 trace file using `mf_nonce_brute`. Useful when KDF-based key derivation is not available. |
+| `lib/__init__.py` | Shared helper functions (Proxmark3 location detection, subprocess wrapper) used by the scripts above. |
+
 ## Requirements
 
 - Basic command line knowledge
-- A computer running macOS or Linux, or a Windows computer with a WSL installation
 - Python 3.6 or higher
 - Bambu Lab Filament spool **or** the related tags
 - An NFC/RFID reader that can read encrypted tags, such as...
@@ -71,7 +91,9 @@ A lot of the contents have been deciphered, but the more data we have, the easie
     - The [proxmark3 (Iceman fork) software](https://github.com/RfidResearchGroup/proxmark3)
       - Requires v4.21128 or higher
       - You MUST use the Iceman fork as the original version of the software is unmaintained; all instructions and scripts are written for the Iceman fork and will NOT work on the original version
+    - On Windows: set the `PROXMARK3_DIR` environment variable to your installation directory (e.g. `D:\Proxmark3`)
   - A Flipper Zero (limited writing capabilities)
+  - A libnfc-compatible reader (for use with `libnfc_dump.py` on Linux/macOS)
 
 ### Proxmark3 compatible readers
 
