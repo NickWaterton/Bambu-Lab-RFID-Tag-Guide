@@ -11,6 +11,7 @@
 import os
 import re
 import sys
+import json
 import time
 import shutil
 import argparse
@@ -188,6 +189,143 @@ def dest_dir(tag_data, color_name, library_root):
     return library_root / category / material / color_name / uid
 
 # ---------------------------------------------------------------------------
+# Bambu Studio colour database
+# ---------------------------------------------------------------------------
+
+# Standard install locations on Windows; extend if needed.
+COLOR_DB_PATHS = [
+    Path(r"C:\Program Files\Bambu Studio\resources\profiles\BBL\filament\filaments_color_codes.json"),
+    Path(r"C:\Program Files (x86)\Bambu Studio\resources\profiles\BBL\filament\filaments_color_codes.json"),
+]
+
+
+def load_color_database():
+    """
+    Load the Bambu Studio filament colour database.
+    Returns a list of entries, or an empty list if the file is not found.
+    """
+    for path in COLOR_DB_PATHS:
+        if path.exists():
+            try:
+                with open(path, encoding='utf-8') as f:
+                    raw = json.load(f)
+                # Top-level is {"data": [...]}
+                return raw.get('data', raw) if isinstance(raw, dict) else raw
+            except Exception as e:
+                print(f"Warning: could not read colour database at {path}: {e}")
+    return []
+
+
+def lookup_color_name(tag_data, db):
+    """
+    Search the Bambu Studio colour database for entries matching this tag's
+    hex colour.
+
+    Filters by colour type (单色 / 渐变色 / 多拼色) using filament_color_count so
+    that single-colour tags never match gradient entries and vice versa.
+
+    Returns (exact_name, candidates) where:
+      exact_name  -- English name when material type AND hex both matched, else None
+      candidates  -- list of (name, fila_type) for entries where only hex matched
+    """
+    if not db:
+        return None, []
+
+    target_color = tag_data['filament_color'].upper()
+    target_type  = tag_data['detailed_filament_type']
+    is_multi     = tag_data.get('filament_color_count', 1) > 1
+
+    # fila_color_type values: 单色 = single, 渐变色 = gradient, 多拼色 = multi-splice
+    SINGLE_TYPE = '单色'
+    MULTI_TYPES = {'渐变色', '多拼色'}
+
+    exact_name = None
+    candidates = []
+
+    for entry in db:
+        # Skip entries whose colour-count class doesn't match the tag
+        entry_color_type = entry.get('fila_color_type', '')
+        if is_multi and entry_color_type not in MULTI_TYPES:
+            continue
+        if not is_multi and entry_color_type != SINGLE_TYPE:
+            continue
+
+        colors = [c.upper() for c in entry.get('fila_color', [])]
+        if target_color not in colors:
+            continue
+
+        name = entry.get('fila_color_name', {}).get('en', '').strip()
+        if not name:
+            continue
+
+        if entry.get('fila_type') == target_type:
+            if exact_name is None:      # take the first exact match
+                exact_name = name
+        else:
+            candidates.append((name, entry.get('fila_type', '?')))
+
+    return exact_name, candidates
+
+
+def prompt_color_name(tag_data, db):
+    """
+    Interactively ask the user for the colour name, pre-filling from the
+    Bambu Studio database where possible.
+
+    Returns the chosen colour name string, or exits if the user cancels.
+    """
+    exact_name, candidates = lookup_color_name(tag_data, db)
+
+    print()
+    print(f"Hex colour: {tag_data['filament_color']}")
+
+    suggested = None
+
+    if exact_name:
+        # Perfect match — type AND colour both match
+        print(f"Official Bambu Studio name: {exact_name}")
+        suggested = exact_name
+    elif candidates:
+        if len(candidates) == 1:
+            name, ftype = candidates[0]
+            print(f"Possible name from Bambu Studio: {name!r}")
+            print(f"  (matched by colour only — database type is '{ftype}', tag type is"
+                  f" '{tag_data['detailed_filament_type']}')")
+            suggested = name
+        else:
+            print("No exact type+colour match; possible names from Bambu Studio:")
+            for name, ftype in candidates:
+                print(f"  {name!r}  (database type: '{ftype}')")
+    elif db:
+        print("(Colour not found in Bambu Studio database — enter manually.)")
+    else:
+        print("(Bambu Studio not found — enter colour name manually.)")
+
+    print("Enter the colour name as it appears in the Bambu Lab store,")
+    print("or press Enter to accept the suggestion above." if suggested else
+          "or press Enter to cancel.")
+
+    raw = input(f"Colour name [{suggested}]: " if suggested else "Colour name: ").strip()
+
+    if not raw:
+        if suggested:
+            print(f"Using: {suggested}")
+            return suggested
+        else:
+            print("Cancelled.")
+            sys.exit(0)
+
+    if suggested and raw != suggested:
+        print(f"  *** WARNING: the official Bambu Studio name is '{suggested}' ***")
+        print(f"      You entered '{raw}'.")
+        confirm = input("  Use your name instead? (y/N) ").strip()
+        if confirm.lower() not in ('y', 'yes'):
+            print(f"  Reverted to: {suggested}")
+            return suggested
+
+    return raw
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -214,6 +352,8 @@ def main():
     from update_readme import run as update_readme
 
     setup()
+
+    color_db = load_color_database()
 
     print("--------------------------------------------------------")
     print("RFID Tag Scanner - Bambu Research Group")
@@ -284,14 +424,8 @@ def main():
                 print("Skipped.")
                 return
 
-        # --- Step 7: ask for the colour name ---
-        print()
-        print("Enter the colour name for this spool as it appears in the Bambu Lab store.")
-        print(f"(Hex colour is {tag.data['filament_color']} — use that as a reference if unsure.)")
-        color_name = input("Colour name: ").strip()
-        if not color_name:
-            print("Cancelled.")
-            sys.exit(0)
+        # --- Step 7: ask for the colour name (with database lookup) ---
+        color_name = prompt_color_name(tag.data, color_db)
 
         # --- Step 8: confirm destination ---
         dst = dest_dir(tag.data, color_name, LIBRARY_ROOT)
