@@ -163,6 +163,24 @@ def dump_tag(uid, key_path, output_base):
 # Library helpers
 # ---------------------------------------------------------------------------
 
+def find_existing_entries(uid, library_root):
+    """
+    Search the library for any folder whose name matches uid.
+    The UID is always the 4th-level folder (category/material/colour/uid),
+    so this finds the tag regardless of which category or colour it was filed under.
+    Returns a list of matching Path objects (should normally be 0 or 1).
+    """
+    results = []
+    for p in library_root.rglob(uid):
+        if not p.is_dir():
+            continue
+        parts = p.relative_to(library_root).parts
+        # Must be exactly at depth 4 and not inside an internal folder (_quarantine etc.)
+        if len(parts) == 4 and not parts[0].startswith('_'):
+            results.append(p)
+    return results
+
+
 def dest_dir(tag_data, color_name, library_root):
     category = CATEGORY_MAP.get(tag_data['filament_type'], tag_data['filament_type'])
     material = resolve_material(tag_data)
@@ -204,21 +222,28 @@ def main():
     # --- Step 1: locate tag ---
     uid = wait_for_tag()
 
+    # --- Step 2: check if this UID is already in the library ---
+    existing = find_existing_entries(uid, LIBRARY_ROOT)
+    if existing:
+        print(f"\nThis tag is already in the library:")
+        for entry in existing:
+            print(f"  {entry.relative_to(LIBRARY_ROOT)}")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir     = Path(tmpdir)
         base_name  = f"hf-mf-{uid}"
         key_path   = tmpdir / f"{base_name}-key.bin"
         dump_base  = tmpdir / base_name
 
-        # --- Step 2: derive keys and write key file ---
-        print("Deriving Bambu keys from UID...")
+        # --- Step 3: derive keys and write key file ---
+        print("\nDeriving Bambu keys from UID...")
         try:
             write_key_file(uid, key_path)
         except Exception as e:
             print(f"Error deriving keys: {e}")
             sys.exit(1)
 
-        # --- Step 3: dump all sectors ---
+        # --- Step 4: dump all sectors ---
         print("Dumping tag sectors (this may take a moment)...")
         dump_file = dump_tag(uid, key_path, dump_base)
         if not dump_file:
@@ -227,7 +252,7 @@ def main():
             print("or the tag may be out of range.")
             sys.exit(1)
 
-        # --- Step 4: parse the dump ---
+        # --- Step 5: parse the dump and display tag details ---
         try:
             with open(dump_file, 'rb') as f:
                 tag = Tag(dump_file.name, f.read(), fail_on_warn=False)
@@ -236,7 +261,7 @@ def main():
             sys.exit(1)
 
         print()
-        print("Tag data read successfully:")
+        print("Tag data:")
         resolved = resolve_material(tag.data)
         raw      = tag.data['detailed_filament_type']
         material_display = (
@@ -250,9 +275,17 @@ def main():
             print("  Warnings:")
             for w in tag.warnings:
                 print(f"    - {w}")
-        print()
 
-        # --- Step 5: ask for the colour name ---
+        # --- Step 6: if already present, ask whether to proceed ---
+        if existing:
+            print()
+            confirm = input("Add to library anyway? (y/N) ")
+            if confirm.lower() not in ('y', 'yes'):
+                print("Skipped.")
+                return
+
+        # --- Step 7: ask for the colour name ---
+        print()
         print("Enter the colour name for this spool as it appears in the Bambu Lab store.")
         print(f"(Hex colour is {tag.data['filament_color']} — use that as a reference if unsure.)")
         color_name = input("Colour name: ").strip()
@@ -260,7 +293,7 @@ def main():
             print("Cancelled.")
             sys.exit(0)
 
-        # --- Step 6: confirm destination ---
+        # --- Step 8: confirm destination ---
         dst = dest_dir(tag.data, color_name, LIBRARY_ROOT)
         print()
         print(f"Will write to: {dst.relative_to(LIBRARY_ROOT)}")
@@ -274,12 +307,12 @@ def main():
 
         dst.mkdir(parents=True, exist_ok=True)
 
-        # --- Step 7: copy dump and key files ---
+        # --- Step 9: copy dump and key files ---
         shutil.copy2(dump_file, dst / f"{base_name}-dump.bin")
         shutil.copy2(key_path,  dst / f"{base_name}-key.bin")
-        print(f"Copied dump and key files.")
+        print("Copied dump and key files.")
 
-        # --- Step 8: generate JSON / NFC / additional formats ---
+        # --- Step 10: generate JSON / NFC / additional formats ---
         print("Generating additional formats (JSON, NFC)...")
         try:
             sync_directory(dst)
@@ -291,7 +324,7 @@ def main():
         print(f"  {dst.relative_to(LIBRARY_ROOT)}")
         print()
 
-        # --- Step 9: optionally update README ---
+        # --- Step 11: optionally update README ---
         confirm = input("Update README.md to reflect the new entry? (y/N) ")
         if confirm.lower() in ('y', 'yes'):
             update_readme(LIBRARY_ROOT)
