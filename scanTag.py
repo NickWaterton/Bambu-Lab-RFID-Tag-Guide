@@ -18,6 +18,8 @@ import argparse
 import itertools
 import tempfile
 import subprocess
+import urllib.request
+import urllib.error
 from pathlib import Path
 
 from lib import get_proxmark3_location, run_command
@@ -192,27 +194,66 @@ def dest_dir(tag_data, color_name, library_root):
 # Bambu Studio colour database
 # ---------------------------------------------------------------------------
 
-# Standard install locations on Windows; extend if needed.
-COLOR_DB_PATHS = [
+# Authoritative source — maintained by Bambu Lab alongside BambuStudio releases.
+COLOR_DB_URL = (
+    "https://raw.githubusercontent.com/bambulab/BambuStudio/master"
+    "/resources/profiles/BBL/filament/filaments_color_codes.json"
+)
+
+# Local fallback — present when Bambu Studio is installed on this machine.
+COLOR_DB_LOCAL_PATHS = [
     Path(r"C:\Program Files\Bambu Studio\resources\profiles\BBL\filament\filaments_color_codes.json"),
     Path(r"C:\Program Files (x86)\Bambu Studio\resources\profiles\BBL\filament\filaments_color_codes.json"),
 ]
+
+# Network timeout in seconds for the GitHub fetch.
+COLOR_DB_TIMEOUT = 5
+
+
+def _parse_color_db(raw):
+    """Extract the list of entries from the parsed JSON (handles {"data":[...]} wrapper)."""
+    if isinstance(raw, dict):
+        return raw.get('data', [])
+    return raw  # already a plain list
 
 
 def load_color_database():
     """
     Load the Bambu Studio filament colour database.
-    Returns a list of entries, or an empty list if the file is not found.
+
+    Tries GitHub first (always up to date); falls back to the locally
+    installed copy if the network is unavailable.  Returns a list of
+    colour entries, or an empty list if neither source is reachable.
     """
-    for path in COLOR_DB_PATHS:
+    # --- 1. Try GitHub ---
+    try:
+        req = urllib.request.Request(
+            COLOR_DB_URL,
+            headers={'User-Agent': 'scanTag/1.0 (Bambu-Research-Group)'},
+        )
+        with urllib.request.urlopen(req, timeout=COLOR_DB_TIMEOUT) as resp:
+            raw = json.loads(resp.read().decode('utf-8'))
+        entries = _parse_color_db(raw)
+        if entries:
+            print(f"Loaded colour database from GitHub ({len(entries)} entries).")
+            return entries
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyboardInterrupt):
+        pass  # fall through to local copy
+
+    # --- 2. Fall back to local Bambu Studio installation ---
+    for path in COLOR_DB_LOCAL_PATHS:
         if path.exists():
             try:
                 with open(path, encoding='utf-8') as f:
                     raw = json.load(f)
-                # Top-level is {"data": [...]}
-                return raw.get('data', raw) if isinstance(raw, dict) else raw
+                entries = _parse_color_db(raw)
+                if entries:
+                    print(f"(GitHub unreachable — using local colour database, {len(entries)} entries.)")
+                    return entries
             except Exception as e:
-                print(f"Warning: could not read colour database at {path}: {e}")
+                print(f"Warning: could not read local colour database at {path}: {e}")
+
+    print("(Colour database not available — colour name must be entered manually.)")
     return []
 
 
